@@ -26,7 +26,6 @@ if (phenotype == 'both'){
 n_ind <- uniqueN(cdr3_freq$patient_id)
 imgt_to_discard <- c('P104', 'P105', 'P106', 'P117', 'P118')
 cdr3_freq <- cdr3_freq[n_carriers >= (n_ind/2)][!(IMGT %in% imgt_to_discard)]
-cdr3_freq$length_seq <- paste0('L', cdr3_freq$length_seq)
 cdr3_freq$pair <- paste0(cdr3_freq$length_seq, '_', cdr3_freq$IMGT)
 cdr3_freq <- cdr3_freq[!(pair %in% analysed_pairs)]
 

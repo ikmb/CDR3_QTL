@@ -227,7 +227,7 @@ define_cond_hits <- function(manova_results, condit_round = 2){
 
 site_matrix <- function(sites){
     ref_sites <- data.table::dcast(hla_alleles_long[site %in% sites], allele ~ site, value.var = 'AA')[allele %in% unique(hla_alleles_patients$allele)]
-    combin <- apply(ref_sites[,-1], 1, function(x) paste0(x, sites, collapse = '_'))
+    combin <- apply(ref_sites[,-1], 1, function(x) paste(sites, x, sep = '_', collapse = '_'))
     ref_sites$comb <- combin
     ref_sites <- ref_sites[, .(allele, comb)]
     return(ref_sites)

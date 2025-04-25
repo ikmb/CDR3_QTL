@@ -79,51 +79,50 @@ hla_var_sites <- sapply(grep(paste0(hla_gene,'_'), list.files('/work_beegfs/sukm
 })
 hla_var_sites <- unname(hla_var_sites)
 
-conditional_sites <- c('DRB1_13', 'DRB1_37', 'DRB1_71')
 
 bonf <- 0.05 / nrow(na.omit(manova_cond_all))
 min_P <- min(na.omit(manova_cond_all$Pvalue))
 rm(manova_cond_all)
 
-while (min_P < bonf){
-    first <- TRUE
-    cond_round <- cond_round + 1
-    for (l in cdr3_lengths){
-        if (cond_round == 1){
-            significant_hits <- conditional_sites
-        } else {
-            significant_hits <- significant_hits_with_length[[l]]
-        }
-        
-        hla_reduced <- sites_recategorate(hla_alleles_patients, site_matrix(significant_hits))
-        hla_reduced_with_pca <- merge(hla_reduced, pca_dt, by = 'patient_id')
-        x_reduced_alleles <- colnames(hla_reduced)[-1]
-        path_cond_manova <- paste0(dir_results_cond_phenotype, hla_gene, '_with_drb1_13_37_71_round_',cond_round, '.tsv')
-        
-        for (dx in cdr3_freq_split_length_wide[[l]]){
-        
-            pair <- dx$pair[1]
+conditional_sites <- c('DRB1_13', 'DRB1_37', 'DRB1_71')
+if (cond_round == 0){
+    significant_hits <- conditional_sites
+} else {
+    significant_hits <- significant_hits_with_length[[l]]
+}
 
-            cdr3_hla_matrix <- merge(dx, phenotypes, by = 'patient_id')
-            amino_acids <-c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y') 
-            aa_in_matrix <- colnames(cdr3_hla_matrix)[colnames(cdr3_hla_matrix) %in% amino_acids]
-            Y_matrix <- cdr3_hla_matrix %>% dplyr::select(all_of(aa_in_matrix))
-            Y_matrix <- as.data.frame(as.matrix(Y_matrix))
-            #X_reduced <- "group"
-            X_reduced <- hla_reduced
-            formula_null <- as.formula(str_c('Y_matrix ~', X_reduced))
-            permod0 <- adonis2(formula_null, data = cdr3_hla_matrix, parallel = (detectCores() - 2) , method="robust.aitchison", permutations = 20000)
+hla_reduced <- sites_recategorate(hla_alleles_patients, site_matrix(significant_hits))
+hla_reduced_with_pca <- merge(hla_reduced, pca_dt, by = 'patient_id')
+x_reduced_alleles <- colnames(hla_reduced)[-1]
+path_cond_manova <- paste0(dir_results_cond_phenotype, hla_gene, '_with_drb1_13_37_71_round_',cond_round, '.tsv')
+hla_var_sites_to_test <- hla_var_sites[!(hla_var_sites %in% significant_hits)]
+combinations_to_test <- lapply(hla_var_sites_to_test, function(x) c(significant_hits,x))
 
-            permanova_dt_all <- as.data.table(permod0[1,])
-            permanova_dt_all$Site_hla <- c('null')
+amino_acids <-c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y') 
+first <- TRUE
+for (l in cdr3_lengths){
+    for (dx in cdr3_freq_split_length_wide[[l]]){
+    
+        pair <- dx$pair[1]
 
-            aic_permod0 <- AICc_permanova2(permod0)
-            permanova_dt_all$aic <- c(aic_permod0$AICc)
-            permanova_dt_all$variance_explained <- permod0$R2[1]
+        cdr3_hla_matrix <- merge(dx, phenotypes, by = 'patient_id')
+        cdr3_hla_matrix <- merge(cdr3_hla_matrix, hla_reduced, by = 'patient_id')
 
-        
-        hla_var_sites_to_test <- hla_var_sites[!(hla_var_sites %in% significant_hits)]
-        combinations_to_test <- lapply(hla_var_sites_to_test, function(x) c(significant_hits,x))
+        aa_in_matrix <- colnames(cdr3_hla_matrix)[colnames(cdr3_hla_matrix) %in% amino_acids]
+        Y_matrix <- cdr3_hla_matrix %>% dplyr::select(all_of(aa_in_matrix))
+        Y_matrix <- as.data.frame(as.matrix(Y_matrix))
+        X_reduced <- colnames(hla_reduced[,-1])
+        formula_null <- as.formula(str_c('Y_matrix ~ group +', paste(X_reduced, collapse = '+')))
+        permod0 <- adonis2(formula_null, data = cdr3_hla_matrix, 
+                parallel = (detectCores() - 2) , method="robust.aitchison", permutations = 10000)
+
+        permanova_dt_all <- as.data.table(permod0[1,])
+        permanova_dt_all$Site_hla <- c('null')
+
+        aic_permod0 <- AICc_permanova2(permod0)
+        permanova_dt_all$aic <- c(aic_permod0$AICc)
+        permanova_dt_all$variance_explained <- permod0$R2[1]
+
 
         for (j in seq_along(combinations_to_test)){
             sites <- combinations_to_test[[j]]
@@ -137,11 +136,11 @@ while (min_P < bonf){
             
             # Merge by patient (cross join)
             merged <- merge(
-              dt_drb1, dt_dqa1,
-              by = "patient_id", allow.cartesian = TRUE, suffixes = c("_drb1", "_dqa1")
+                dt_drb1, dt_dqa1,
+                by = "patient_id", allow.cartesian = TRUE, suffixes = c("_drb1", "_dqa1")
             )
             merged <- merged[, .(
-              Site_hla_AA_drb1 = paste(unique(Site_hla_AA_drb1), collapse = "_"),
+                Site_hla_AA_drb1 = paste(unique(Site_hla_AA_drb1), collapse = "_"),
                 homo_hetero_drb1 = unique(homo_hetero_drb1),
                 allele_dqa1 = unique(allele_dqa1),
                 homo_hetero_dqa1 = unique(homo_hetero_dqa1),
@@ -155,8 +154,8 @@ while (min_P < bonf){
             dqa1_haplotypes_alleles <- hla_alleles_correlations[value > 0.2][Var1!=Var2][Var1 %like% 'DRB1'][Var2 %like% 'DQA1']
             
             valid <- merged[dqa1_haplotypes_alleles, 
-              on = .(allele_dqa1 = Var2, allele_drb1 = Var1), 
-              nomatch = 0
+                on = .(allele_dqa1 = Var2, allele_drb1 = Var1), 
+                nomatch = 0
             ]
             valid_cleaned <- unique(valid[, .(patient_id, homo_hetero_drb1, homo_hetero_dqa1, haplo)])[, 
                 homo_hetero := min(homo_hetero_drb1, homo_hetero_dqa1), by = patient_id][,
@@ -165,40 +164,57 @@ while (min_P < bonf){
             cond <- paste(sites, collapse = ':')
             cond_covariates <- colnames(conditional_matrix)[-1]
 
-            for (dx in cdr3_freq_split_length_wide[[l]]){
-                cdr3_matrix <- merge(dx, hla_reduced_with_pca, by = 'patient_id')
-                test <- merge(cdr3_matrix, conditional_matrix, by = 'patient_id')
-                if (using_groups == TRUE){
-                    test <- merge(test, phenotypes, by = 'patient_id')
-                }   
-                tryCatch({
-                    manova_cond <- conditional_fun(test, x_reduced_alleles, cond_covariates)
-                    manova_cond$condition <- cond
-                    setnames(manova_cond, old = grep('Pr', colnames(manova_cond), value = TRUE), new = 'Pvalue')
-                    manova_cond <- manova_cond[, c('Length_cdr3', 'IMGT'):= tstrsplit(pair, '_', keep = c(1,2))]
-                    if (first){
-                        fwrite(manova_cond, path_cond_manova, sep = '\t')
-                        first <- FALSE
+            test <- merge(cdr3_hla_matrix, conditional_matrix, by = 'patient_id')
+            Y_matrix <- test %>% dplyr::select(all_of(aa_in_matrix))
+            Y_matrix <- as.data.frame(as.matrix(Y_matrix))
+            X <- paste0(paste0(cond_covariates, collapse = '+'), ' + group')
 
-                    } else {
-                        fwrite(manova_cond, path_cond_manova, sep = '\t', append = TRUE)
-                    }
-                    
-                }, error = function(e){
-                    print(e)
-                })
+            formula_full <- as.formula(str_c('Y_matrix ~', X))
+            permod1 <- adonis2(formula_full, data = test, parallel = (detectCores() - 2), method="robust.aitchison", permutations = 10000)
+
+            permanova_dt <- as.data.table(permod1[1,])
+            aic_permod1 <- AICc_permanova2(permod1)
+            permanova_dt$aic <- c(aic_permod1$AICc)
+            permanova_dt$Site_hla <- hla_site
+            permanova_dt$variance_explained <- permod1$R2[1]
+            permanova_dt_all <- rbind(permanova_dt_all, permanova_dt)
+            
+            tryCatch({
+                manova_cond <- conditional_fun(test, x_reduced_alleles, cond_covariates)
+                manova_cond$condition <- cond
+                setnames(manova_cond, old = grep('Pr', colnames(manova_cond), value = TRUE), new = 'Pvalue')
+                manova_cond <- manova_cond[, c('Length_cdr3', 'IMGT'):= tstrsplit(pair, '_', keep = c(1,2))]
+                if (first){
+                    fwrite(manova_cond, path_cond_manova, sep = '\t')
+                    first <- FALSE
+
+                } else {
+                    fwrite(manova_cond, path_cond_manova, sep = '\t', append = TRUE)
+                }
                 
-            }
+            }, error = function(e){
+                print(e)
+            })
+            
         }
-        }
-    manova_cond_all <- fread(path_cond_manova, sep = '\t')
-    sig_sites <- na.omit(manova_cond_all) %>% 
-        group_by(Length_cdr3) %>% 
-        filter(Pvalue == min(Pvalue)) %>% 
-        filter(variance_explained == max(variance_explained)) %>% unique()
-    significant_hits_with_length <- lapply(sig_sites$condition, function(x) unlist(strsplit(x, ':')))
+    
+    permanova_dt_all$pair <- pair
+    permanova_dt_all$HLA <- hla_gene
+    permanova_dt_all <- permanova_dt_all %>% 
+        rename( Pvalue = grep("Pr", colnames(permanova_dt_all), value = TRUE)) %>% 
+        arrange(Pvalue)
+    permanova_dt_all <- permanova_dt_all[, c('Length_cdr3', 'IMGT'):= tstrsplit(pair, '_', keep = c(1,2))]
+    fwrite(permanova_dt_all, paste0(dir_results_cond,hla_gene,'_',pair,'_',phenotype,'permanova.tsv'), sep = '\t')
+    }
+    }
 
-    names(significant_hits_with_length) <- sig_sites$Length_cdr3
-    min_P <- min(na.omit(manova_cond_all$Pvalue))
-    rm(manova_cond_all)
-}
+manova_cond_all <- fread(path_cond_manova, sep = '\t')
+sig_sites <- na.omit(manova_cond_all) %>% 
+    group_by(Length_cdr3) %>% 
+    filter(Pvalue == min(Pvalue)) %>% 
+    filter(variance_explained == max(variance_explained)) %>% unique()
+significant_hits_with_length <- lapply(sig_sites$condition, function(x) unlist(strsplit(x, ':')))
+
+names(significant_hits_with_length) <- sig_sites$Length_cdr3
+min_P <- min(na.omit(manova_cond_all$Pvalue))
+rm(manova_cond_all)
