@@ -17,13 +17,17 @@ analysed_pairs <- unlist(lapply(analysed_pairs, function(x) paste0(x[2:3], colla
 
 if (phenotype == 'both'){
     cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')
-    pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')
+} else if (phenotype!= 'H' & phenotype != 'I'){
+    cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')[group %like% phenotype]
 } else {
     cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')[patient_id %like% phenotype]
-    pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %like% phenotype]
 }
 
+ids <- unique(cdr3_freq$patient_id)
 n_ind <- uniqueN(cdr3_freq$patient_id)
+
+pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %in% ids]
+
 imgt_to_discard <- c('P104', 'P105', 'P106', 'P117', 'P118')
 cdr3_freq <- cdr3_freq[n_carriers >= (n_ind/2)][!(IMGT %in% imgt_to_discard)]
 cdr3_freq$pair <- paste0(cdr3_freq$length_seq, '_', cdr3_freq$IMGT)
@@ -46,13 +50,8 @@ rm(cdr3_freq_split_length)
 
 phenotypes <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/phenotypes.tsv')
 hla_alleles_long <- fread(paste0('/work_beegfs/sukmb667/projects/cdr3-qtl/reference_data/hla_msa/',hla_gene,'_long.tsv'))
-if (phenotype == 'I'){
-    hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/ibd_hla_features.tsv')[gene == hla_gene]
-} else if (phenotype == 'H'){
-    hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/healthy_hla_features.tsv')[gene == hla_gene]
-} else {
-    hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/hla_features_healthy_and_ibd.tsv')[gene == hla_gene]
-}
+hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/hla_features_healthy_and_ibd.tsv')
+hla_alleles_patients <- hla_alleles_patients[gene == hla_gene][patient_id %in% ids]
 alleles_in_dataset <- unique(hla_alleles_patients$allele)
 
 hla_var_sites <- sapply(grep(hla_gene, list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/as_in_Ishigaki/'), value = TRUE), function(x) {

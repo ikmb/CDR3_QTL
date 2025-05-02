@@ -10,30 +10,40 @@ source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functi
 source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/libraries_analysis.R')
 
 
-if (using_groups == TRUE){
-    dir_results_cond <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/conditional_analysis/with_haplotypes/with_groups/'
-    phenotypes <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/phenotypes.tsv')
-} else {
-    dir_results_cond <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/conditional_analysis/with_haplotypes/'
+dir_results_cond <- paste0('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/conditional_analysis/with_haplotypes/', phenotype, '/')
+if (!file.exists(dir_results_cond)) {
+    dir.create(dir_results_cond, recursive = TRUE)
+    }
+phenotypes <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/phenotypes.tsv')
+
+dir_results_cond_permanova <- paste0(dir_results_cond, 'permanova/')
+if (!file.exists(dir_results_cond_permanova)) {
+    dir.create(dir_results_cond_permanova, recursive = TRUE)
     }
 
-dir_results_cond_phenotype <- paste0(dir_results_cond, phenotype, '/')
-if (!file.exists(dir_results_cond_phenotype)) {
-    dir.create(dir_results_cond_phenotype, recursive = TRUE)
-    }
-
+analysed_pairs <- strsplit(list.files(dir_results_cond_permanova), '_')
+analysed_pairs <- unlist(lapply(analysed_pairs, function(x) paste0(x[2:3], collapse = '_')))
 
 if (phenotype == 'both'){
     cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')
-    pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')
+} else if (phenotype!= 'H' & phenotype != 'I'){
+    cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')[group %like% phenotype]
 } else {
     cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')[patient_id %like% phenotype]
-    pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %like% phenotype]
 }
 
+ids <- unique(cdr3_freq$patient_id)
 n_ind <- uniqueN(cdr3_freq$patient_id)
+
+pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %in% ids]
+
 imgt_to_discard <- c('P104', 'P105', 'P106', 'P117', 'P118')
 cdr3_freq <- cdr3_freq[n_carriers >= (n_ind/2)][!(IMGT %in% imgt_to_discard)]
+
+#############
+cdr3_freq$pair <- paste0(cdr3_freq$length_seq, '_', cdr3_freq$IMGT)
+cdr3_freq <- cdr3_freq[!(pair %in% analysed_pairs)] ### THIS STEP IS ONLY NEEDED WHEN USING PERMANOVA
+##############
 
 cdr3_freq_split_length <- split(cdr3_freq, cdr3_freq$length_seq)
 cdr3_freq_split_length_wide <- lapply(cdr3_freq_split_length, function(x){
@@ -55,13 +65,10 @@ hla_site_correlations <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_
 
 hla_alleles_long <- fread(paste0('/work_beegfs/sukmb667/projects/cdr3-qtl/reference_data/hla_msa/DRB1_long.tsv'))
 hla_alleles_long$site <- paste0('DRB1_', hla_alleles_long$site)
-if (phenotype == 'I'){
-    hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/ibd_hla_features.tsv')[gene == 'DRB1']
-} else if (phenotype == 'H'){
-    hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/healthy_hla_features.tsv')[gene == 'DRB1']
-} else {
-    hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/hla_features_healthy_and_ibd.tsv')[gene == 'DRB1']
-}
+hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/hla_features_healthy_and_ibd.tsv')
+### !!!!!!!!
+hla_alleles_patients <- hla_alleles_patients[gene == 'DRB1'][patient_id %in% ids] ### !!!! hla_gene == 'DRB1' because we condition on DRB1
+### !!!!!!!!!
 alleles_in_dataset <- unique(hla_alleles_patients$allele)
 
 patients_allele <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/hla_genotypes_matrix.csv')
@@ -80,9 +87,9 @@ hla_var_sites <- sapply(grep(paste0(hla_gene,'_'), list.files('/work_beegfs/sukm
 hla_var_sites <- unname(hla_var_sites)
 
 
-bonf <- 0.05 / nrow(na.omit(manova_cond_all))
-min_P <- min(na.omit(manova_cond_all$Pvalue))
-rm(manova_cond_all)
+#bonf <- 0.05 / nrow(na.omit(manova_cond_all))
+#min_P <- min(na.omit(manova_cond_all$Pvalue))
+#rm(manova_cond_all)
 
 conditional_sites <- c('DRB1_13', 'DRB1_37', 'DRB1_71')
 if (cond_round == 0){
@@ -94,7 +101,8 @@ if (cond_round == 0){
 hla_reduced <- sites_recategorate(hla_alleles_patients, site_matrix(significant_hits))
 hla_reduced_with_pca <- merge(hla_reduced, pca_dt, by = 'patient_id')
 x_reduced_alleles <- colnames(hla_reduced)[-1]
-path_cond_manova <- paste0(dir_results_cond_phenotype, hla_gene, '_with_drb1_13_37_71_round_',cond_round, '.tsv')
+
+path_cond_manova <- paste0(dir_results_cond, hla_gene, '_with_drb1_13_37_71_round_',cond_round, '.tsv')
 hla_var_sites_to_test <- hla_var_sites[!(hla_var_sites %in% significant_hits)]
 combinations_to_test <- lapply(hla_var_sites_to_test, function(x) c(significant_hits,x))
 
@@ -161,7 +169,7 @@ for (l in cdr3_lengths){
                 homo_hetero := min(homo_hetero_drb1, homo_hetero_dqa1), by = patient_id][,
                 homo_hetero := if (.N == 1) 2 else homo_hetero, by = patient_id] %>% arrange(patient_id)
             conditional_matrix <- dcast(valid_cleaned, patient_id ~ haplo, value.var = 'homo_hetero', fill = 0, fun.aggregate = sum)
-            cond <- paste(sites, collapse = ':')
+            cond <- paste(sites, collapse = '_')
             cond_covariates <- colnames(conditional_matrix)[-1]
 
             test <- merge(cdr3_hla_matrix, conditional_matrix, by = 'patient_id')
@@ -175,7 +183,7 @@ for (l in cdr3_lengths){
             permanova_dt <- as.data.table(permod1[1,])
             aic_permod1 <- AICc_permanova2(permod1)
             permanova_dt$aic <- c(aic_permod1$AICc)
-            permanova_dt$Site_hla <- hla_site
+            permanova_dt$Site_hla <- sites[4]
             permanova_dt$variance_explained <- permod1$R2[1]
             permanova_dt_all <- rbind(permanova_dt_all, permanova_dt)
             
@@ -204,7 +212,7 @@ for (l in cdr3_lengths){
         rename( Pvalue = grep("Pr", colnames(permanova_dt_all), value = TRUE)) %>% 
         arrange(Pvalue)
     permanova_dt_all <- permanova_dt_all[, c('Length_cdr3', 'IMGT'):= tstrsplit(pair, '_', keep = c(1,2))]
-    fwrite(permanova_dt_all, paste0(dir_results_cond,hla_gene,'_',pair,'_',phenotype,'permanova.tsv'), sep = '\t')
+    fwrite(permanova_dt_all, paste0(dir_results_cond_permanova,hla_gene,'_',pair,'_',phenotype,'permanova.tsv'), sep = '\t')
     }
     }
 
@@ -217,4 +225,4 @@ significant_hits_with_length <- lapply(sig_sites$condition, function(x) unlist(s
 
 names(significant_hits_with_length) <- sig_sites$Length_cdr3
 min_P <- min(na.omit(manova_cond_all$Pvalue))
-rm(manova_cond_all)
+#rm(manova_cond_all)
