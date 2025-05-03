@@ -8,11 +8,12 @@ source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functi
 source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/hla_functions.R')
 source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/libraries_analysis.R')
 
+dir_cond <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/conditional_analysis/'
 if (using_groups == TRUE){
-    dir_results_cond <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/conditional_analysis/with_groups/'
+    dir_results_cond <- paste0(dir_cond, phenotype,'/with_groups/')
     phenotypes <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/phenotypes.tsv')
 } else {
-    dir_results_cond <- paste0('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/conditional_analysis/', phenotype, '/')
+    dir_results_cond <- paste0(dir_cond, phenotype, '/')
     }
 
 if (phenotype == 'both'){

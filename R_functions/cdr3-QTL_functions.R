@@ -37,15 +37,21 @@ define_variables <- function(pair_matrix){
 }
 
 
-define_formulas <- function(hla_alleles, Y_matrix, n_pcs = 3, sites = NULL, method = 'manova'){
+define_formulas <- function(hla_alleles, Y_matrix, n_pcs = 3, sites = NULL, method = 'manova', using_groups = FALSE){
     
     Y <- paste0('cbind(', paste(colnames(Y_matrix), collapse = ','),") ~")
     hlas <- paste(hla_alleles, collapse = '+')
     pcs <- paste0('PC', seq(1,n_pcs), collapse = '+')
 
     if (method == 'manova'){
-        X_full <- paste(hlas, pcs, 'group', sep = '+')
-        X_null <- paste(pcs, 'group', sep = '+')
+        if (using_groups == TRUE){
+            X_full <- paste(hlas, pcs, 'group', sep = '+')
+            X_null <- paste(pcs, 'group', sep = '+')
+        } else {
+            X_full <- paste(hlas, pcs, sep = '+')
+            X_null <- paste(pcs, sep = '+')
+        }
+
 
         formula_full <- as.formula(str_c(Y,X_full))
         formula_null <- as.formula(str_c(Y,X_null))
@@ -58,9 +64,14 @@ define_formulas <- function(hla_alleles, Y_matrix, n_pcs = 3, sites = NULL, meth
 
     } else if (method == 'conditional'){
         comb_sites <- paste(sites, collapse = '+')
-        X_full <- paste(comb_sites, pcs, 'group', sep = '+')
-        X_null <- paste(hlas, pcs, 'group', sep = '+')
-  
+        if (using_groups == TRUE){
+            X_full <- paste(comb_sites, pcs, 'group', sep = '+')
+            X_null <- paste(hlas, pcs, 'group', sep = '+')
+        } else {
+            X_full <- paste(comb_sites, pcs, sep = '+')
+            X_null <- paste(hlas, pcs, sep = '+')
+        }
+
         formula_full <- as.formula(str_c(Y, X_full))
         formula_null <- as.formula(str_c(Y, X_null))
 
@@ -72,7 +83,7 @@ define_formulas <- function(hla_alleles, Y_matrix, n_pcs = 3, sites = NULL, meth
 
 
 
-mlm_fun <- function(cdr3_hla_matrix, writing_mode = 'no', dir_results = "work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/manova_results/irt_freq_unique/", n_pcs = 3){
+mlm_fun <- function(cdr3_hla_matrix, writing_summary_mode = 'no', n_pcs = 3, using_groups = FALSE){
     
     bonf <- 0.0001/nrow(cdr3_hla_matrix)
     variables <- define_variables(cdr3_hla_matrix)
@@ -87,7 +98,8 @@ mlm_fun <- function(cdr3_hla_matrix, writing_mode = 'no', dir_results = "work_be
     manova_results <- anova(mod1, mod0)
     manova_df <- as.data.table(manova_results)
     manova_df[, pair := name_pair]
-    
+    setnames(manova_df, old = grep('Pr', colnames(manova_df), value = TRUE), new = 'Pvalue')
+    manova_df <- manova_df[, c('Length_cdr3', 'IMGT', 'HLA', 'Site_hla'):= tstrsplit(pair, '_', keep = c(1,2,3,4))]
     tryCatch({
     
     if (sum(is.na(rowSums(coef(mod1)))) > 0){
@@ -95,7 +107,6 @@ mlm_fun <- function(cdr3_hla_matrix, writing_mode = 'no', dir_results = "work_be
         allele_to_exclude <- rownames(coef(mod1))[is.na(rowSums(coef(mod1)))]
         new_hla_alleles <- setdiff(variables$hla_alleles, allele_to_exclude)
         formulas <- define_formulas(new_hla_alleles, Y_matrix, n_pcs = 3, method = 'manova')
-    
     } 
     
     }, 
@@ -126,12 +137,12 @@ mlm_fun <- function(cdr3_hla_matrix, writing_mode = 'no', dir_results = "work_be
     })
         
        
-    if (writing_mode == 'yes'){
+    if (writing_summary_mode == 'yes'){
 
         mod1_summary <- summary(mod1)
         mod0_summary <- summary(mod0)
 
-        dir_results_summary <- paste0(dir_results,'/mmlm_summary/')
+        dir_results_summary <- paste0(dir_results_manova,'/mmlm_summary/')
         if (!file.exists(dir_results_summary)) {
             dir.create(dir_results_summary, recursive = TRUE)
         }
@@ -139,22 +150,21 @@ mlm_fun <- function(cdr3_hla_matrix, writing_mode = 'no', dir_results = "work_be
         mod1_mvlm_summary <- summary(mod1_mvlm)
         mod0_mvlm_summary <- summary(mod0_mvlm)
         
-        dir_results_summary_mvlm <- paste0(dir_results,'/mvlm_summary/')
+        dir_results_summary_mvlm <- paste0(dir_results_manova,'/mvlm_summary/')
         if (!file.exists(dir_results_summary_mvlm)) {
             dir.create(dir_results_summary_mvlm, recursive = TRUE)
             }
 
-        if (na.omit(manova_df)$`Pr(>F)` < bonf){
-        
-    
-        lapply(summary(mod1), function(x){
-            capture.output(x, file=paste0(dir_results_summary,name_pair,'_mod1.txt'), append = TRUE)})
-        lapply(summary(mod0), function(x){
-            capture.output(x, file=paste0(dir_results_summary,name_pair,'_mod0.txt'), append = TRUE)})
-        lapply(summary(mod1_mvlm), function(x){
-            capture.output(x, file=paste0(dir_results_summary_mvlm,name_pair,'_mod1.txt'), append = TRUE)})
-        lapply(summary(mod0_mvlm), function(x){
-            capture.output(x, file=paste0(dir_results_summary_mvlm,name_pair,'_mod0.txt'), append = TRUE)}) 
+        if (na.omit(manova_df)$Pvalue < bonf){
+
+            lapply(summary(mod1), function(x){
+                capture.output(x, file=paste0(dir_results_summary,name_pair,'_mod1.txt'), append = TRUE)})
+            lapply(summary(mod0), function(x){
+                capture.output(x, file=paste0(dir_results_summary,name_pair,'_mod0.txt'), append = TRUE)})
+            lapply(summary(mod1_mvlm), function(x){
+                capture.output(x, file=paste0(dir_results_summary_mvlm,name_pair,'_mod1.txt'), append = TRUE)})
+            lapply(summary(mod0_mvlm), function(x){
+                capture.output(x, file=paste0(dir_results_summary_mvlm,name_pair,'_mod0.txt'), append = TRUE)}) 
     } 
 }
     manova_df <- cbind(manova_df, mvlm_df)
