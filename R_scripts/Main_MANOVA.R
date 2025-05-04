@@ -9,6 +9,7 @@ source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/librarie
 # downsampling_size 1000
 # using_groups TRUE, FALSE
 # pcs <- 3
+# hla_gene from hla_genes <- c('DQB1', 'DQA1', 'B', 'DPB1', 'DPA1', 'A', 'C')
 
 dir_manova <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/manova_results/'
 if (using_groups == TRUE){
@@ -37,7 +38,7 @@ if (downsampling){
 if (!dir.exists(dir_results_manova)){
     dir.create(dir_results_manova, recursive = TRUE)
 }
-path_manova <- paste0(dir_results_manova, 'manova_results_', phenotype, '.tsv')
+path_manova <- paste0(dir_results_manova, 'manova_results_', phenotype,'_',hla_gene, '.tsv')
 
 n_ind <- uniqueN(cdr3_freq$patient_id)
 
@@ -62,8 +63,8 @@ rm(cdr3_freq)
 rm(cdr3_freq_split_length)
 
 
-hla_paths <- list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/with_pcs/',
-    pattern = '.tsv', full.names = TRUE)
+hla_paths <- grep(paste0(hla_gene, "_"), list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/with_pcs/',
+    pattern = '.tsv', full.names = TRUE), value = TRUE)
 
 first <- TRUE
 
@@ -83,7 +84,7 @@ for (l in cdr3_lengths){
             #setnames(manova_df, old = grep('Pr', colnames(manova_df), value = TRUE), new = 'Pvalue')
             #manova_df <- manova_df[, c('Length_cdr3', 'IMGT', 'HLA', 'Site_hla'):= tstrsplit(pair, '_', keep = c(1,2,3,4))]
 
-            if (first){
+            if (first & !file.exists(path_manova)){
                 fwrite(manova_df, path_manova, sep = '\t')
                 first <- FALSE
 

@@ -216,7 +216,7 @@ permanova_fun <- function(cdr3_hla_matrix, cond_covariates, x_reduced_alleles, n
 
 ### CONDITIONAL PART
 
-define_cond_hits <- function(manova_results, condit_round = 2){
+define_cond_hits <- function(manova_results, condit_round = 2, gene_names_in_cond = FALSE){
     #bonf_cor <- 0.05/nrow(manova_results)/2  # deviding by 2 because we have two models for each pair 
     if (condit_round == 1){
         sig_sites <- na.omit(manova_results) %>% 
@@ -229,7 +229,18 @@ define_cond_hits <- function(manova_results, condit_round = 2){
             group_by(Length_cdr3) %>% 
             filter(Pvalue == min(Pvalue)) %>% 
             filter(variance_explained == max(variance_explained)) %>% unique()
-        sig_sites_with_length <- lapply(sig_sites$condition, function(x) unlist(strsplit(x, '_')))
+        if (gene_names_in_cond | grepl("DR",sig_sites$condition[1])){
+            sig_sites_with_length <- lapply(sig_sites$condition, function(x) {
+            condition <- strsplit(x, '_')[[1]]
+            paired <- mapply(function(a, b) paste(a, b, sep = "_"),
+                            condition[seq(1, length(condition), by = 2)],
+                            condition[seq(2, length(condition), by = 2)])
+            unname(paired)
+        })
+        } else {
+            sig_sites_with_length <- lapply(sig_sites$condition, function(x) unlist(strsplit(x, '_')))
+        } 
+
     }
     names(sig_sites_with_length) <- sig_sites$Length_cdr3
     return(sig_sites_with_length)
@@ -237,7 +248,7 @@ define_cond_hits <- function(manova_results, condit_round = 2){
 
 site_matrix <- function(sites){
     ref_sites <- data.table::dcast(hla_alleles_long[site %in% sites], allele ~ site, value.var = 'AA')[allele %in% unique(hla_alleles_patients$allele)]
-    combin <- apply(ref_sites[,-1], 1, function(x) paste(x, sites, sep = '_', collapse = '_'))
+    combin <- apply(ref_sites[,-1], 1, function(x) paste(sites, x, sep = '_', collapse = '_'))
     ref_sites$comb <- combin
     ref_sites <- ref_sites[, .(allele, comb)]
     return(ref_sites)
@@ -249,23 +260,9 @@ sites_recategorate <- function(hla_table, site_combinations){
     return(hla_patient_comb_matrix)
 }
 
-site_matrix_haplotype <- function(sites){
-    ref_sites <- data.table::dcast(hla_haplotype_reference[Site_hla %in% sites], haplotype ~ Site_hla, value.var = 'AA')
-    setcolorder(ref_sites, c('haplotype', sites))
-    combin <- apply(ref_sites[,-1], 1, function(x) paste(colnames(ref_sites)[-1], x, sep= '_', collapse = '_'))
-    ref_sites$comb <- combin
-    ref_sites <- ref_sites[, .(haplotype, comb)]
-    return(ref_sites)
-}
-
-sites_recategorate_haplotype <- function(hla_haplotype_table, site_combinations){
-    hla_patient_haplotype_comb <- merge(hla_haplotype_table, site_combinations, by = 'haplotype')
-    hla_patient_haplotype_comb_matrix <- data.table::dcast(hla_patient_haplotype_comb, patient_id ~ comb, value.var = 'homo_hetero', fun.aggregate = sum)
-    return(hla_patient_haplotype_comb_matrix)
-}
 
 
-conditional_fun <- function(cdr3_hla_matrix, x_reduced_sites, conditional_sites){
+conditional_fun <- function(cdr3_hla_matrix, x_reduced_sites, conditional_sites, using_pcs = TRUE){
     try({
         
         name_pair <- unique(cdr3_hla_matrix$pair)
@@ -279,11 +276,15 @@ conditional_fun <- function(cdr3_hla_matrix, x_reduced_sites, conditional_sites)
         comb_sites <- paste(conditional_sites, collapse = '+')
 
         if ('group' %in% colnames(cdr3_hla_matrix) ){
-            X_full <- paste(comb_sites, pcs, 'group', sep = '+')
-            X_null <- paste(x_reduced, pcs, 'group', sep = '+')
+            X_full <- paste(comb_sites, 'group', sep = '+')
+            X_null <- paste(x_reduced, 'group', sep = '+')
         } else {
-            X_full <- paste(comb_sites, pcs, sep = '+')
-            X_null <- paste(x_reduced, pcs, sep = '+')
+            X_full <- paste(comb_sites, sep = '+')
+            X_null <- paste(x_reduced, sep = '+')
+        }
+        if (using_pcs == TRUE){
+            X_full <- paste(X_full, pcs, sep = '+')
+            X_null <- paste(X_null, pcs, sep = '+')
         }
 
         formula_full <- as.formula(str_c(Y, X_full))
@@ -306,11 +307,15 @@ conditional_fun <- function(cdr3_hla_matrix, x_reduced_sites, conditional_sites)
         
         try({
             if ('group' %in% colnames(cdr3_hla_matrix) ){
-                X_full <- paste(new_comb_sites, pcs, 'group', sep = '+')
-                X_null <- paste(new_x_reduced, pcs, 'group', sep = '+')
+                X_full <- paste(new_comb_sites, 'group', sep = '+')
+                X_null <- paste(new_x_reduced, 'group', sep = '+')
             } else {
-                X_full <- paste(new_comb_sites, pcs, sep = '+')
-                X_null <- paste(new_x_reduced, pcs, sep = '+')
+                X_full <- paste(new_comb_sites)
+                X_null <- paste(new_x_reduced)
+            }
+            if (using_pcs == TRUE){
+                X_full <- paste(X_full, pcs, sep = '+')
+                X_null <- paste(X_null, pcs, sep = '+')
             }
 
             formula_full <- as.formula(str_c(Y, X_full))
@@ -348,100 +353,6 @@ conditional_fun <- function(cdr3_hla_matrix, x_reduced_sites, conditional_sites)
 
     }, silent = TRUE)
     
-}
-
-
-mlm_fun_conditional <- function(cdr3_hla_matrix, dir_results, sites, n_pcs = 3, writing_mode = 'no'){
-    
-    very_significant <- 0.01/100000
-    name_pair <- unique(cdr3_hla_matrix$pair)
-
-    variables <- define_variables(cdr3_hla_matrix)
-    hla_alleles <- variables[[1]]
-    Y_matrix <- variables[[2]]
-
-    formulas <- define_formulas(hla_alleles, Y_matrix, n_pcs = n_pcs, sites = sites, method = 'conditional')
-
-    mod1 <- lm(formulas[[1]], data = cdr3_hla_matrix)
-    mod0 <- lm(formulas[[2]], data = cdr3_hla_matrix)
-
-    manova_results <- anova(mod0, mod1)
-    
-    tryCatch({
-        
-        if (sum(is.na(rowSums(coef(mod1)))) > 0){
-
-            allele_to_exclude <- rownames(coef(mod1))[is.na(rowSums(coef(mod1)))]
-            new_hla_alleles <- setdiff(hla_alleles, allele_to_exclude)
-            new_sites <- setdiff(sites, allele_to_exclude)
-            formulas <- define_formulas(new_hla_alleles, Y_matrix, n_pcs = 3, sites = new_sites, method = 'conditional')
-
-        } 
-        
-        }, 
-        error = function(e) {
-            # Handle the error
-            message("Error: ", e)
-        },
-        finally = {
-            mod1_mvlm <- mvlm(formulas[[1]], cdr3_hla_matrix)
-            mod0_mvlm <- mvlm(formulas[[2]], cdr3_hla_matrix)
-            
-            var_exp_full <- mod1_mvlm$pseudo.rsq["Omnibus Effect",1]
-            p_val_full <- mod1_mvlm$pv["Omnibus Effect",1]
-            
-            var_exp_null <- mod0_mvlm$pseudo.rsq["Omnibus Effect",1]
-            p_val_null <- mod0_mvlm$pv["Omnibus Effect",1]
-            
-            variance_explained <- var_exp_full - var_exp_null
-            names(variance_explained) <- 'var_expl'
-            P_val <-  mapply(c, p_val_null, p_val_full)
-            colnames(P_val) <- 'P_val'
-            Omnibus = mapply(c, var_exp_null, var_exp_full)
-            colnames(Omnibus) <- 'Omnibus'
-            
-            mvlm_df <- data.table(Omnibus, model = c('null', 'full'),P_val, variance_explained)
-            manova_df <- cbind(data.table(manova_results), mvlm_df)
-            manova_df$pair <- name_pair
-
-        })
-        
-    if (writing_mode == 'yes'){
-        mod1_summary <- summary(mod1)
-        mod0_summary <- summary(mod0)
-    
-        dir_results_summary <- paste0(dir_results,'/mmlm_summary/')
-        if (!file.exists(dir_results_summary)) {
-            dir.create(dir_results_summary, recursive = TRUE)
-            }
-
-        mod1_mvlm_summary <- summary(mod1_mvlm)
-        mod0_mvlm_summary <- summary(mod0_mvlm)
-        
-        dir_results_summary_mvlm <- paste0(dir_results,'/mvlm_summary/')
-        if (!file.exists(dir_results_summary_mvlm)) {
-            dir.create(dir_results_summary_mvlm, recursive = TRUE)
-            }
-
-        try({
-            if (na.omit(manova_df)$Pr..F. < very_significant){
-            
-                lapply(summary(mod1), function(x){
-                    capture.output(x, file=paste0(dir_results_summary,name_pair,'_mod1.txt'), append = TRUE)})
-                lapply(summary(mod0), function(x){
-                    capture.output(x, file=paste0(dir_results_summary,name_pair,'_mod0.txt'), append = TRUE)})
-                lapply(summary(mod1_mvlm), function(x){
-                    capture.output(x, file=paste0(dir_results_summary_mvlm,name_pair,'_mod1.txt'), append = TRUE)})
-                lapply(summary(mod0_mvlm), function(x){
-                    capture.output(x, file=paste0(dir_results_summary_mvlm,name_pair,'_mod0.txt'), append = TRUE)}) 
-            } 
-          
-            }, silent = TRUE)
-    }
-
-
-    return(manova_df)                
-         
 }
 
 

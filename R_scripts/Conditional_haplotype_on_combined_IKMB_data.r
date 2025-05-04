@@ -3,6 +3,9 @@
 # hla_gene from hla_genes <- c('DQB1', 'DQA1', 'B', 'DPB1', 'DPA1', 'A', 'C')
 # cond_round
 # using_groups TRUE, FALSE
+# path_manova
+# downsampling TRUE, FALSE
+# downsampling_size
 
 source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/cdr3-QTL_functions.R')
 source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/hla_functions.R')
@@ -60,6 +63,7 @@ rm(cdr3_freq_split_length)
 
 
 hla_alleles_long <- fread(paste0('/work_beegfs/sukmb667/projects/cdr3-qtl/reference_data/hla_msa/',hla_gene,'_long.tsv'))
+hla_alleles_long$site <- paste0(hla_gene, '_', hla_alleles_long$site)
 
 hla_alleles_patients <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/hla_features_healthy_and_ibd.tsv')
 hla_alleles_patients <- hla_alleles_patients[gene == hla_gene][patient_id %in% ids]
@@ -67,15 +71,16 @@ hla_alleles_patients <- hla_alleles_patients[gene == hla_gene][patient_id %in% i
 alleles_in_dataset <- unique(hla_alleles_patients$allele)
 
 hla_var_sites <- sapply(grep(paste0(hla_gene,'_'), list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/as_in_Ishigaki/'), value = TRUE), function(x) {
-    unlist(strsplit(x, '_'), use.names = FALSE)[[2]]
+    gsub('_matrix.tsv', '', x)
 })
 hla_var_sites <- unname(hla_var_sites)
 
 if (cond_round == 0){
-    manova_cond_all <- na.omit(fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/manova_results/main_manova_as_in_Ishigaki.tsv'))[, 
+    manova_cond_all <- na.omit(fread(path_manova))[, 
         Length_cdr3 := paste0('L', Length_cdr3)][HLA == hla_gene]
     setnames(manova_cond_all, old = grep('Pr', colnames(manova_cond_all), value = TRUE), new = 'Pvalue')
     significant_hits_with_length <- define_cond_hits(manova_cond_all, 1)
+    significant_hits_with_length <- lapply(significant_hits_with_length, function(x) paste(hla_gene, x, sep = '_'))
 } else {
     manova_cond_all <- fread(paste0(dir_results_cond, hla_gene, '_conditional_round_',cond_round, '.tsv'))
     significant_hits_with_length <- define_cond_hits(manova_cond_all)
@@ -86,14 +91,14 @@ rm(manova_cond_all)
 
 while (min_P < bonf){
     first <- TRUE
-
+    cond_round <- cond_round + 1
     for (i in seq_along(significant_hits_with_length)){
         l <- names(significant_hits_with_length[i])
         significant_hits <- significant_hits_with_length[[l]]
         hla_reduced <- sites_recategorate(hla_alleles_patients, site_matrix(significant_hits))
         hla_reduced_with_pca <- merge(hla_reduced, pca_dt, by = 'patient_id')
         x_reduced_alleles <- colnames(hla_reduced)[-1]
-        path_cond_manova <- paste0(dir_results_cond, hla_gene, '_conditional_round_',length(significant_hits), '.tsv')
+        path_cond_manova <- paste0(dir_results_cond, hla_gene, '_conditional_round_',cond_round, '.tsv')
         hla_var_sites_to_test <- hla_var_sites[!(hla_var_sites %in% significant_hits)]
         combinations_to_test <- lapply(hla_var_sites_to_test, function(x) c(significant_hits,x))
 
@@ -115,10 +120,9 @@ while (min_P < bonf){
                     manova_cond$condition <- cond
                     setnames(manova_cond, old = grep('Pr', colnames(manova_cond), value = TRUE), new = 'Pvalue')
                     manova_cond <- manova_cond[, c('Length_cdr3', 'IMGT'):= tstrsplit(pair, '_', keep = c(1,2))]
-                    if (first){
+                    if (first & !file.exists(path_cond_manova)){
                         fwrite(manova_cond, path_cond_manova, sep = '\t', append = FALSE)
                         first <- FALSE
-
                     } else {
                         fwrite(manova_cond, path_cond_manova, sep = '\t', append = TRUE)
                     }
