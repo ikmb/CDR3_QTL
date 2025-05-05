@@ -219,6 +219,12 @@ permanova_fun <- function(cdr3_hla_matrix, cond_covariates, x_reduced_alleles, n
 define_cond_hits <- function(manova_results, condit_round = 2, gene_names_in_cond = FALSE){
     #bonf_cor <- 0.05/nrow(manova_results)/2  # deviding by 2 because we have two models for each pair 
     if (condit_round == 1){
+        if (!grepl('L', manova_results$Length_cdr3[1])){
+            manova_results <- manova_results[, Length_cdr3 := paste0('L', Length_cdr3)]
+        }
+        if (!('Pvalue' %in% colnames(manova_results))){
+            setnames(manova_results, old = grep('Pr', colnames(manova_results), value = TRUE), new = 'Pvalue')
+        }
         sig_sites <- na.omit(manova_results) %>% 
             filter(variance_explained > 0) %>%
             group_by(Length_cdr3) %>% 
@@ -227,6 +233,7 @@ define_cond_hits <- function(manova_results, condit_round = 2, gene_names_in_con
         sig_sites_with_length <- sig_sites$Site_hla
     } else {
         sig_sites <- na.omit(manova_results) %>% 
+            filter(variance_explained > 0) %>%
             group_by(Length_cdr3) %>% 
             filter(Pvalue == min(Pvalue)) %>% 
             filter(variance_explained == max(variance_explained)) %>% unique()

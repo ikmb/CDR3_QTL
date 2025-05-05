@@ -38,7 +38,6 @@ if (downsampling){
 if (!dir.exists(dir_results_manova)){
     dir.create(dir_results_manova, recursive = TRUE)
 }
-path_manova <- paste0(dir_results_manova, 'manova_results_', phenotype,'_',hla_gene, '.tsv')
 
 n_ind <- uniqueN(cdr3_freq$patient_id)
 
@@ -62,43 +61,43 @@ cdr3_lengths <- names(cdr3_freq_split_length_wide)
 rm(cdr3_freq)
 rm(cdr3_freq_split_length)
 
+for (hla_gene in hla_genes){
+    hla_paths <- grep(paste0(hla_gene, "_"), list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/with_pcs/',
+        pattern = '.tsv', full.names = TRUE), value = TRUE)
+    path_manova <- paste0(dir_results_manova, 'manova_results_', phenotype,'_',hla_gene, '.tsv')
 
-hla_paths <- grep(paste0(hla_gene, "_"), list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/with_pcs/',
-    pattern = '.tsv', full.names = TRUE), value = TRUE)
+    first <- TRUE
 
-first <- TRUE
+    for (l in cdr3_lengths){
+            for (dt in cdr3_freq_split_length_wide[[l]]){
+                for (hla in hla_paths){
+                    hla_with_pca <- fread(hla)[patient_id %in% ids]
+                    hla_site <- unique(hla_with_pca$G_S)
+                    cdr3_matrix <- merge(dt, hla_with_pca, by = 'patient_id')
+                    cdr3_matrix$pair <- paste0(cdr3_matrix$pair, "_", hla_site)
+                    if (using_groups == TRUE){
+                        cdr3_matrix <- merge(cdr3_matrix, phenotypes, by = 'patient_id') 
+                    }
+                tryCatch({
 
-for (l in cdr3_lengths){
-        for (dt in cdr3_freq_split_length_wide[[l]]){
-            for (hla in hla_paths){
-                hla_with_pca <- fread(hla)[patient_id %in% ids]
-                hla_site <- unique(hla_with_pca$G_S)
-                cdr3_matrix <- merge(dt, hla_with_pca, by = 'patient_id')
-                cdr3_matrix$pair <- paste0(cdr3_matrix$pair, "_", hla_site)
-                if (using_groups == TRUE){
-                    cdr3_matrix <- merge(cdr3_matrix, phenotypes, by = 'patient_id') 
+                manova_df <- mlm_fun(cdr3_matrix, n_pcs = pcs)
+                #setnames(manova_df, old = grep('Pr', colnames(manova_df), value = TRUE), new = 'Pvalue')
+                #manova_df <- manova_df[, c('Length_cdr3', 'IMGT', 'HLA', 'Site_hla'):= tstrsplit(pair, '_', keep = c(1,2,3,4))]
+
+                if (first & !file.exists(path_manova)){
+                    fwrite(manova_df, path_manova, sep = '\t')
+                    first <- FALSE
+
+                } else {
+                    fwrite(manova_df, path_manova, sep = '\t', append = TRUE)
                 }
-            tryCatch({
 
-            manova_df <- mlm_fun(cdr3_matrix, n_pcs = pcs)
-            #setnames(manova_df, old = grep('Pr', colnames(manova_df), value = TRUE), new = 'Pvalue')
-            #manova_df <- manova_df[, c('Length_cdr3', 'IMGT', 'HLA', 'Site_hla'):= tstrsplit(pair, '_', keep = c(1,2,3,4))]
-
-            if (first & !file.exists(path_manova)){
-                fwrite(manova_df, path_manova, sep = '\t')
-                first <- FALSE
-
-            } else {
-                fwrite(manova_df, path_manova, sep = '\t', append = TRUE)
+                }, error = function(e){
+                    print(e)
+                })
+                
             }
-
-            }, error = function(e){
-                print(e)
-            })
-            
         }
-    }
-    }
-manova_all <- fread(path_manova, sep = '\t')
-significant_hits_with_length <- define_cond_hits(manova_all, condit_round = 1)
+        }
+}
 
