@@ -39,11 +39,10 @@ n_ind <- uniqueN(cdr3_freq$patient_id)
 pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %in% ids]
 
 imgt_to_discard <- c('P104', 'P105', 'P106', 'P117', 'P118')
-cdr3_freq <- cdr3_freq[n_carriers >= (n_ind/2)][!(IMGT %in% imgt_to_discard)]
+cdr3_freq <- cdr3_freq[n_carriers >= (n_ind/2)][!(IMGT %in% imgt_to_discard)][length_seq %in% c('L13', 'L14', 'L15', 'L16', 'L17')]
 
 #############
 cdr3_freq$pair <- paste0(cdr3_freq$length_seq, '_', cdr3_freq$IMGT)
-cdr3_freq <- cdr3_freq[!(pair %in% analysed_pairs)] ### THIS STEP IS ONLY NEEDED WHEN USING PERMANOVA
 ##############
 
 cdr3_freq_split_length <- split(cdr3_freq, cdr3_freq$length_seq)
@@ -126,7 +125,7 @@ for (l in cdr3_lengths){
             
             dt2 <- dt[grepl(paste(sites, collapse = "|"), Site_hla_AA)]
             
-            dt_dqa1 <- dt2[grepl("^DQA1", Site_hla_AA)]
+            dt_dqa1 <- dt2[grepl(paste0(hla_gene, '_'), Site_hla_AA)]
             dt_drb1 <- dt2[grepl("^DRB1", Site_hla_AA)]
             
             # Merge by patient (cross join)
@@ -146,7 +145,7 @@ for (l in cdr3_lengths){
             merged[, haplo := paste0(Site_hla_AA_drb1, "_", Site_hla_AA_dqa1)]
             
             #dqa1_haplotypes <- hla_site_correlations[HLA1 != HLA2][Var1 %like% paste0(sites[[2]],'_')][Var2 %like% paste0(sites[[1]],'_')][value > -0.1]
-            dqa1_haplotypes_alleles <- hla_alleles_correlations[value > 0.3][Var1!=Var2][Var1 %like% 'DRB1'][Var2 %like% 'DQA1']
+            dqa1_haplotypes_alleles <- hla_alleles_correlations[value > 0.1][Var1!=Var2][Var1 %like% 'DRB1'][Var2 %like% hla_gene]
             
             valid <- merged[dqa1_haplotypes_alleles, 
                 on = .(allele_dqa1 = Var2, allele_drb1 = Var1), 

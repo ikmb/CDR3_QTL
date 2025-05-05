@@ -220,6 +220,7 @@ define_cond_hits <- function(manova_results, condit_round = 2, gene_names_in_con
     #bonf_cor <- 0.05/nrow(manova_results)/2  # deviding by 2 because we have two models for each pair 
     if (condit_round == 1){
         sig_sites <- na.omit(manova_results) %>% 
+            filter(variance_explained > 0) %>%
             group_by(Length_cdr3) %>% 
             filter(Pvalue == min(Pvalue)) %>% 
             filter(variance_explained == max(variance_explained)) %>% unique()
@@ -229,7 +230,7 @@ define_cond_hits <- function(manova_results, condit_round = 2, gene_names_in_con
             group_by(Length_cdr3) %>% 
             filter(Pvalue == min(Pvalue)) %>% 
             filter(variance_explained == max(variance_explained)) %>% unique()
-        if (gene_names_in_cond | grepl("DR",sig_sites$condition[1])){
+        if (gene_names_in_cond | grepl(paste0(hla_genes, collapse = '|'),sig_sites$condition[1])){
             sig_sites_with_length <- lapply(sig_sites$condition, function(x) {
             condition <- strsplit(x, '_')[[1]]
             paired <- mapply(function(a, b) paste(a, b, sep = "_"),

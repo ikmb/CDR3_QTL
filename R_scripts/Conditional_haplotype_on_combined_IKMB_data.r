@@ -76,9 +76,13 @@ hla_var_sites <- sapply(grep(paste0(hla_gene,'_'), list.files('/work_beegfs/sukm
 hla_var_sites <- unname(hla_var_sites)
 
 if (cond_round == 0){
-    manova_cond_all <- na.omit(fread(path_manova))[, 
-        Length_cdr3 := paste0('L', Length_cdr3)][HLA == hla_gene]
-    setnames(manova_cond_all, old = grep('Pr', colnames(manova_cond_all), value = TRUE), new = 'Pvalue')
+    manova_cond_all <- na.omit(fread(path_manova))[HLA == hla_gene]
+    if (!grepl('L', manova_cond_all$Length_cdr3[1])){
+        manova_cond_all <- manova_cond_all[, Length_cdr3 := paste0('L', Length_cdr3)]
+    }
+    if (!('Pvalue' %in% colnames(manova_cond_all))){
+        setnames(manova_cond_all, old = grep('Pr', colnames(manova_cond_all), value = TRUE), new = 'Pvalue')
+    }
     significant_hits_with_length <- define_cond_hits(manova_cond_all, 1)
     significant_hits_with_length <- lapply(significant_hits_with_length, function(x) paste(hla_gene, x, sep = '_'))
 } else {
@@ -87,9 +91,10 @@ if (cond_round == 0){
 }
 bonf <- 0.05 / nrow(na.omit(manova_cond_all))
 min_P <- min(na.omit(manova_cond_all$Pvalue))
+max_var_expl <- max(manova_cond_all$variance_explained)
 rm(manova_cond_all)
 
-while (min_P < bonf){
+while (min_P < bonf & max_var_expl > 0){
     first <- TRUE
     cond_round <- cond_round + 1
     for (i in seq_along(significant_hits_with_length)){
@@ -137,5 +142,6 @@ while (min_P < bonf){
     manova_cond_all <- fread(path_cond_manova, sep = '\t')
     significant_hits_with_length <- define_cond_hits(manova_cond_all)
     min_P <- min(na.omit(manova_cond_all$Pvalue))
+    max_var_expl <- max(manova_cond_all$variance_explained)
     rm(manova_cond_all)
 }
