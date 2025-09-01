@@ -1,12 +1,13 @@
-source('libraries.R')
-source('cdr3_functions.R')
+source('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/libraries_analysis.R')
+source('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/cdr3_functions.R')
 
 #------preprocessing .parquet files, treating each seqience as unique-------
 
-path_healthy <- '../../TRB_samples//raw_data/'
-path_ibd <- '../../TCellData//IBD_CDR3_QTL/IBD_TCR_REP/'
-path_out <- '../data/preprocessed_cdr3/'
-seq_depth <- 30000
+path_healthy <- '/work_ikmb/sukmb667/projects/cdr3-qtl/TRB_samples//raw_data/'
+path_ibd <- '/work_ikmb/sukmb667/projects/cdr3-qtl/TCellData//IBD_CDR3_QTL/IBD_TCR_REP/'
+path_out <- '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3/minimal_preprocessed/'
+seq_depth <- 30000 # this threshold is used to remove low depth repertoires,
+# which are not suitable for further analysis
 
 if (!file.exists(path_out)) {
         dir.create(path_out, recursive = TRUE)

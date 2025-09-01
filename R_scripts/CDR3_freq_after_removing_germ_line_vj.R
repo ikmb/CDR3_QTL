@@ -1,5 +1,4 @@
-source('libraries.R')
-source('cdr3_functions.R')
+
 
 #path_in <- '../data/preprocessed_cdr3/'
 #path_out <- '../data/cdr3_freq_with_expansion/'

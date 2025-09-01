@@ -4,6 +4,33 @@ dfs_together <- function(dir_path, path_out){
     fwrite(manova_df_all, path_out, sep = '\t')    
 }
 
+cdr3_freq_by_phenotype <- function(cdr3_freq_path, phen, cdr3_measure = 'norm_freq_unique' ){
+    cdr3_freq <- fread(cdr3_freq_path)
+    if (!('Length_cdr3' %in% colnames(cdr3_freq))){
+            setnames(cdr3_freq, old = grep('length', colnames(cdr3_freq), value = TRUE), new = 'Length_cdr3')
+        }
+    if (!grepl('L', cdr3_freq$Length_cdr3[1])){
+            cdr3_freq <- cdr3_freq[, Length_cdr3 := paste0('L', Length_cdr3)]
+        }
+
+    if (phen!= 'H' & phen != 'I' & phen != 'both'){
+        cdr3_freq <- merge(cdr3_freq, phen, by = 'patient_id', all.x = TRUE)
+        cdr3_freq <- cdr3_freq[group %like% phen]
+        cdr3_freq <- cdr3_freq[, n_carriers := uniqueN(patient_id)
+            , by = .(Length_cdr3, IMGT, AA)][,
+                irt_freq_unique := qnorm((rank(norm_freq_unique, na.last="keep") - 0.5) / sum(!is.na(norm_freq_unique)))
+            , by = .(Length_cdr3, IMGT, AA)]
+    } else if (phen != 'both'){
+        cdr3_freq <- cdr3_freq[patient_id %like% phen]
+        cdr3_freq <- cdr3_freq[, 
+            n_carriers := uniqueN(patient_id)
+            , by = .(Length_cdr3, IMGT, AA)][,
+                irt_freq_unique := qnorm((rank(norm_freq_unique, na.last="keep") - 0.5) / sum(!is.na(norm_freq_unique)))
+            , by = .(Length_cdr3, IMGT, AA)]
+    }
+    return(cdr3_freq)
+}
+
 define_variables <- function(pair_matrix){
     # method can be 'manova' or 'permanova' or 'conditional'
     amino_acids <-c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y') 
@@ -205,7 +232,7 @@ permanova_fun <- function(cdr3_hla_matrix, cond_covariates, x_reduced_alleles, n
     permanova_dt$aic <- c(aic_permod1$AICc, aic_permod0$AICc)
     
     if (writing_mode == 'yes'){
-        path_bd <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/permanova_results/PERMANOVA_9999perm.db'
+        path_bd <- '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/permanova_results/PERMANOVA_9999perm.db'
         conn <- dbConnect(RSQLite::SQLite(), dbname = path_bd)
         dbWriteTable(conn, path_bd, permanova_dt, append = TRUE)
         dbDisconnect(conn)}
@@ -435,5 +462,62 @@ remove_correlated_columns <- function(df_matrix, cutoff_value){
     df_wo_correlations <- df_matrix[, c(columns_to_remove) := NULL]
     
     return(df_wo_correlations)
+}
+
+
+smallest_number <- .Machine$double.xmin
+determine_pval_from_each_round <- function(path, hla_gene, group_name){
+    dt <- na.omit(fread(path))
+    if (grepl(hla_gene, dt$condition[1])){
+        cond_round <- length(unlist(strsplit(dt$condition[1], paste0(hla_gene,'_'))))
+    } else {
+        cond_round <- length(unlist(strsplit(dt$condition[1], '_')))
+    }
+    sig_sites_dt <- dt %>% 
+        mutate(Pvalue = ifelse(Pvalue == 0 | Pvalue == Inf , smallest_number, Pvalue)) %>%
+        filter(Pvalue <= 0.05/5000) %>%
+        filter(variance_explained >0 ) %>%
+        group_by(Length_cdr3) %>% 
+        filter(Pvalue == min(Pvalue)) %>%
+        dplyr::select(Length_cdr3, Pvalue, IMGT, Omnibus, condition) %>%
+        rename('variance_explained' = 'Omnibus') %>%
+        separate_rows(condition, sep = '_') %>% 
+        filter(condition != hla_gene) %>%
+        unique() %>%
+        mutate(Site_hla = paste0(hla_gene, '_', condition),
+            condition = as.numeric(condition),
+            cond_round = pmin(seq_along(condition),cond_round),
+            group = group_name) %>%
+        filter(cond_round == max(cond_round))
+    }
+
+determine_pval_from_main_manova <- function(path, hla_gene, group_name){
+    if (!file.exists(path)){
+        path <- '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/manova_results/main_manova_as_in_Ishigaki.tsv'
+    }
+    manova_results <- na.omit(fread(path))
+    if (!grepl('L', manova_results$Length_cdr3[1])){
+        manova_results <- manova_results[, Length_cdr3 := paste0('L', Length_cdr3)]
+    }
+    if (!('Pvalue' %in% colnames(manova_results))){
+        setnames(manova_results, old = grep('Pr', colnames(manova_results), value = TRUE), 
+            new = 'Pvalue')
+    }
+    if (!('IMGT' %in% colnames(manova_results))){
+        setnames(manova_results, old = grep('Position_cdr3', colnames(manova_results), value = TRUE), 
+            new = 'IMGT')
+    }
+    manova_results <- manova_results[HLA == hla_gene] %>% 
+        filter(variance_explained >0 ) %>%
+        group_by(Length_cdr3) %>% unique() %>% 
+        filter(Pvalue == min(Pvalue)) %>% 
+        filter(variance_explained == max(variance_explained)) %>%
+        ungroup() %>%
+        mutate(condition = Site_hla) %>% 
+        dplyr::select(Length_cdr3, Pvalue, IMGT, variance_explained, condition) 
+    manova_results$Site_hla <- paste0(hla_gene, '_', manova_results$condition)
+    manova_results$cond_round <- 1
+    manova_results$group <- group_name
+    return(manova_results)
 }
 

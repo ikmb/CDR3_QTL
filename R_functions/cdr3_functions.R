@@ -1,3 +1,4 @@
+#------CDR3 preprocessing------
 
 cdr3_dt_preproccesing <- function(path_to_parquet_file, sample_id, path_out){
     
@@ -20,7 +21,31 @@ cdr3_dt_preproccesing <- function(path_to_parquet_file, sample_id, path_out){
          (length_seq >= 12) & (length_seq <=18)] 
     write_parquet(cdr3_dt, paste0(path_out,'preprocessed_',sample_id,'.parquet'))
     }
+
+
+cdr3_dt_minimal_preproccesing <- function(path_to_parquet_file, sample_id, path_out){
     
+    cdr3_dt <- cdr3_dt[sequenceStatus == 'In',                             
+        .(amino_acid = aminoAcid,
+          v_gene = vGeneName, 
+          j_gene = jGeneName, 
+          v_family = vFamilyName, 
+          j_family = jFamilyName, 
+          expansion_freq = frequencyCount,
+          Count = count)][
+         , patient_id := sample_id][
+         , unique_count := 1][
+         , length_seq := nchar(amino_acid)][  
+         , expansion_freq := as.numeric(expansion_freq) / 100][
+         , c("v_gene", "v_gene_2") := tstrsplit(v_gene, "/")][  
+         , v_gene := fifelse(is.na(v_gene), v_family, v_gene)][  
+         , j_gene := fifelse(is.na(j_gene), j_family, j_gene)][  
+         , .(unique_count = sum(unique_count), 
+            cum_expansion_freq = sum(expansion_freq),
+            Count = sum(as.numeric(Count))),                             
+         by = .(patient_id, amino_acid, v_gene, j_gene, length_seq)] 
+    fwrite(cdr3_dt, paste0(path_out,sample_id,'.tsv'), sep = '\t', quote = FALSE, row.names = FALSE)
+    }
 
 
 #-------all IMGT positions--------
@@ -53,14 +78,14 @@ align_imgt <- function(CDR3){
 #-------------V and J germ-line database-----
 
 #AAs encoded in V gene germline sequences
-V_germ_line <- as.data.table(read.table("../../reference_data/references/V_exclude_AA.info",
+V_germ_line <- as.data.table(read.table("/work_ikmb/sukmb667/projects/cdr3-qtl/reference_data/references/V_exclude_AA.info",
                           header=T,colClasses="character"))
 V_germ_line$IMGT <- paste0("P",V_germ_line$IMGT)
 setnames(V_germ_line, "Vgene", "v_gene")
 V_exclude <- paste0(V_germ_line$Vgene,":",V_germ_line$IMGT,":",V_germ_line$AA)
 
 #AAs encoded in J gene germline sequences (we need to consider CDR3 length for J genes)
-J_germ_line <- as.data.table(read.table("../../reference_data/references/J_exclude_AA.info",
+J_germ_line <- as.data.table(read.table("/work_ikmb/sukmb667/projects/cdr3-qtl/reference_data/references/J_exclude_AA.info",
                           header=T,colClasses="character"))
 J_germ_line$IMGT <- paste0("P",J_germ_line$IMGT)
 setnames(J_germ_line, "Jgene", "j_gene")
@@ -139,7 +164,7 @@ v_j_exclude_old <- function(cdr3_group){
         distinct() %>%
         ungroup()
     
-    write.table(cdr3_group_aligned_excluded_germ_long, '../cdr3/cdr3_excluded_germ_long.tsv', sep = '\t', quote = FALSE, row.names = FALSE, append = TRUE, col.names = FALSE)
+    write.table(cdr3_group_aligned_excluded_germ_long, '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3/cdr3_excluded_germ_long.tsv', sep = '\t', quote = FALSE, row.names = FALSE, append = TRUE, col.names = FALSE)
     return(cdr3_group_aligned_excluded_germ_long)
     }
 
@@ -161,7 +186,7 @@ cdr3_freq_with_clonal_expansion <- function(cdr3_aligned){
         mutate(n_carriers = length(unique(patient_id)), n_ind_high_freq = sum(relativ_freq > 0.6)) %>%
         ungroup()
     
-    write_tsv(cdr3_long, '../data/cdr3_freq_healthy_and_ibd_clonal_expansion.tsv')
+    write_tsv(cdr3_long, '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_freq_healthy_and_ibd_clonal_expansion.tsv')
     return(cdr3_long)
 }
 
@@ -173,7 +198,7 @@ cdr3_long_fun <- function(cdr3_aligned){
                         variable.name = "IMGT", 
                         value.name = "AA")
     processed_dt <- na.omit(processed_dt)
-    write_tsv(processed_dt, '../data/cdr3_freq_healthy_and_ibd_long.tsv', append = TRUE, col_names = FALSE)
+    write_tsv(processed_dt, '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_freq_healthy_and_ibd_long.tsv', append = TRUE, col_names = FALSE)
 }
 
 
@@ -198,7 +223,7 @@ cdr3_freq_fun <- function(cdr3_long){
       n_ind_high_freq = sum(relativ_freq > 0.6)
     ), by = .(length, IMGT, AA)]
     
-    fwrite(cdr3_frequencies, '../data/cdr3_freq_healthy_and_ibd_updated_expansion.tsv', sep = '\t')
+    fwrite(cdr3_frequencies, '/healthy_and_ibd/data/cdr3_freq_healthy_and_ibd_updated_expansion.tsv', sep = '\t')
     return(cdr3_frequencies)
 }
 
@@ -249,7 +274,7 @@ cdr3_prep_for_log_matrix_fun <- function(dt){
     # Step 1: Define all possible amino acids (AA)
     all_AAs <- unique(dt$AA)
 
-    ids <- fread('../data/ids_in_cdr3.txt', header = FALSE)
+    ids <- fread('/healthy_and_ibd/data/ids_in_cdr3.txt', header = FALSE)
     
     # Step 2: Use CJ to cross-join patient_id, IMGT, length_seq, and all_AAs to expand the data
     expanded_dt <- CJ(patient_id = ids$V1,
@@ -281,7 +306,7 @@ cdr3_prep_for_count_matrix_fun <- function(dt){
     # Step 1: Define all possible amino acids (AA)
     all_AAs <- unique(dt$AA)
 
-    ids <- fread('../data/ids_in_cdr3.txt', header = FALSE)
+    ids <- fread('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/ids_in_cdr3.txt', header = FALSE)
     
     # Step 2: Use CJ to cross-join patient_id, IMGT, length_seq, and all_AAs to expand the data
     expanded_dt <- CJ(patient_id = ids$V1,
@@ -314,8 +339,8 @@ downsampling_based_on_expansion <- function(cdr3_data, repertoire_size){
     }
 
 downsampling_based_on_unique_freq <- function(cdr3_data, repertoire_size){
-    total_frequency <- sum(cdr3_data$unique_count)
-    cdr3_data$prob <- cdr3_data$unique_count / total_frequency
+    total_counts <- sum(cdr3_data$unique_count)
+    cdr3_data$prob <- cdr3_data$unique_count / total_count
     sampled_clonotypes <- data.table(sample(
       x = cdr3_data$tags,
       size = repertoire_size,

@@ -1,7 +1,7 @@
 
-source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/cdr3-QTL_functions.R')
-source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/hla_functions.R')
-source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/libraries_analysis.R')
+source('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/cdr3-QTL_functions.R')
+source('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/R_functions/hla_functions.R')
+source('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/libraries_analysis.R')
 
 # inputs:
 # phenotype 'both', 'I', 'H', 'UC', 'CD'
@@ -11,29 +11,24 @@ source('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/scripts/librarie
 # pcs <- 3
 # hla_gene from hla_genes <- c('DQB1', 'DQA1', 'B', 'DPB1', 'DPA1', 'A', 'C')
 
-dir_manova <- '/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/manova_results/'
+dir_manova <- '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/manova_results/'
 if (using_groups == TRUE){
     dir_results_manova <- paste0(dir_manova, phenotype, '/with_groups/')
-    phenotypes <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/phenotypes.tsv')
+    phenotypes <- fread('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/phenotypes.tsv')
 } else {
     dir_results_manova <- paste0(dir_manova, phenotype, '/')
     }
 
-if (phenotype == 'both'){
-    cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')
-} else if (phenotype!= 'H' & phenotype != 'I'){
-    cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')[group %like% phenotype]
-} else {
-    cdr3_freq <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv')[patient_id %like% phenotype]
-}
 
+cdr3_file_path <- '/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/cdr3_all_freq_with_IRT.tsv'
+cdr3_freq <- cdr3_freq_by_phenotype(cdr3_file_path, phenotype)
+
+ids <- unique(cdr3_freq$patient_id)
 if (downsampling){
-    ids <- sample(unique(cdr3_freq$patient_id), downsampling_size)
+    ids <- sample(ids, downsampling_size)
     cdr3_freq <- cdr3_freq[patient_id %in% ids]
     dir_results_manova <- paste0(dir_results_manova, 'downsampled/')
-} else {
-    ids <- unique(cdr3_freq$patient_id)
-}
+} 
 
 if (!dir.exists(dir_results_manova)){
     dir.create(dir_results_manova, recursive = TRUE)
@@ -41,14 +36,14 @@ if (!dir.exists(dir_results_manova)){
 
 n_ind <- uniqueN(cdr3_freq$patient_id)
 
-pca_dt <- fread('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %in% ids]
+pca_dt <- fread('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/data/hla/pca_hla_healthy_and_ibd.tsv')[patient_id %in% ids]
 
 imgt_to_discard <- c('P104', 'P105', 'P106', 'P117', 'P118')
 cdr3_freq <- cdr3_freq[n_carriers >= (n_ind/2)][!(IMGT %in% imgt_to_discard)]
 
-cdr3_freq_split_length <- split(cdr3_freq, cdr3_freq$length_seq)
+cdr3_freq_split_length <- split(cdr3_freq, cdr3_freq$Length_cdr3)
 cdr3_freq_split_length_wide <- lapply(cdr3_freq_split_length, function(x){
-    l <- unique(x$length_seq)
+    l <- unique(x$Length_cdr3)
     z <- split(x, x$IMGT)
     lapply(z, function(y){
         p <- unique(y$IMGT)
@@ -62,7 +57,7 @@ rm(cdr3_freq)
 rm(cdr3_freq_split_length)
 
 for (hla_gene in hla_genes){
-    hla_paths <- grep(paste0(hla_gene, "_"), list.files('/work_beegfs/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/with_pcs/',
+    hla_paths <- grep(paste0(hla_gene, "_"), list.files('/work_ikmb/sukmb667/projects/cdr3-qtl/healthy_and_ibd/hla_matrices/with_pcs/',
         pattern = '.tsv', full.names = TRUE), value = TRUE)
     path_manova <- paste0(dir_results_manova, 'manova_results_', phenotype,'_',hla_gene, '.tsv')
 

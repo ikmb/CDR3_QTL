@@ -30,32 +30,29 @@ pivot_and_filter <- function(hla_split, alleles_in_dataset){
 #--------getting the allele variations of hla genes per positions--------
 patient_site_variation_fun <- function(hla_features, gene_name){
   
-    hla_reference_long <- read.csv(paste0("../../reference_data/hla_msa/",gene_name, "_long.tsv"), sep = '\t')
-    hla_patients <- hla_features %>%
-        filter(gene == gene_name)
-    threshold <- uniqueN(hla_patients$patient_id) * 2
-    
-    hla_patients <- hla_patients %>% 
-        inner_join(hla_reference_long, relationship = "many-to-many", by = join_by(allele))  %>%
-        group_by(patient_id, gene, site, AA) %>%
-        summarise(homo_hetero = sum(homo_hetero), .groups = 'keep') %>%
-        ungroup() %>%
-        group_by(site) %>%
-        mutate(n_variat = uniqueN(AA)) %>%
-        filter(n_variat >= 2) %>%
-        ungroup()
-    
-    hla_patients_proper_sites <- hla_patients %>%
-        group_by(site, AA) %>%
-        summarise(n_allele_carriers = sum(homo_hetero), .groups = 'keep') %>% 
-        right_join(hla_patients, by = c('site', 'AA')) %>% 
-        ungroup() %>%
-        group_by(site) %>%
-        mutate(site_to_remove = ifelse(n_allele_carriers >= round(threshold*0.95), 'yes', 'no')) %>%
-        filter(site_to_remove == 'no') %>%
-        filter(n_allele_carriers >= round(threshold*0.05)) %>%
-        ungroup()
+  hla_patients <- hla_features[gene == gene_name]
+  hla_reference_long <- fread(paste0(getwd(), "/reference_data/hla_msa/",gene_name, "_long.tsv"), sep = '\t')
+  hla_reference_long <- hla_reference_long[allele %in% unique(hla_patients$allele)][
+      , n_variat := uniqueN(AA), by = 'site'][n_variat >= 2]
+  threshold <- uniqueN(hla_patients$patient_id) * 2
   
+  hla_patients <- hla_patients %>% 
+      inner_join(hla_reference_long, relationship = "many-to-many", by = join_by(allele))  %>%
+      group_by(patient_id, gene, site, AA) %>%
+      summarise(homo_hetero = sum(homo_hetero), .groups = 'keep') %>%
+      ungroup() 
+  
+  hla_patients_proper_sites <- hla_patients %>%
+      group_by(site, AA) %>%
+      summarise(n_allele_carriers = sum(homo_hetero), .groups = 'keep') %>% 
+      right_join(hla_patients, by = c('site', 'AA')) %>% 
+      ungroup() %>%
+      group_by(site) %>%
+      mutate(site_to_remove = ifelse(n_allele_carriers >= round(threshold*0.95), 'yes', 'no')) %>%
+      filter(site_to_remove == 'no') %>%
+      filter(n_allele_carriers >= round(threshold*0.05)) %>%
+      ungroup()
+
   return(hla_patients_proper_sites)
 }
 
@@ -86,17 +83,17 @@ pca_hla_fun <- function(hla_genotypes_matrix, cor_threshold, n_pcs){
 #--------annotating HLA sequences with locations of antigen-binding pockets-------
 
 hla_pocket <- function(manova_results){
-    A_pocket <- c(5, 7, 59, 63, 66, 159, 163, 167, 171)
-    B_pocket <- c(7, 9, 24, 34, 45, 63, 66, 67, 70, 99)
+    A_pocket <- c(5, 7, 59,163, 167, 171)
+    B_pocket <- c(24, 34, 45, 63, 66, 67)
     C_pocket <- c(9, 70, 73, 74, 97)
-    D_pocket <- c(99, 114, 155, 156, 159, 160)
-    E_pocket <- c(97, 114, 147, 152, 156)
-    F_pocket <- c(77, 80, 81, 84, 95, 123, 143, 146, 147)
+    D_pocket <- c(99, 155, 159, 160)
+    E_pocket <- c(114, 147, 152, 156)
+    F_pocket <- c(77, 80, 81, 84, 95, 123, 143, 146)
     class_I_pockets_dict <- data.frame(Pocket = c(rep('A_pocket',length(A_pocket)), rep('B_pocket',length(B_pocket)), rep('C_pocket',length(C_pocket)), 
                                            rep('D_pocket',length(D_pocket)), rep('E_pocket',length(E_pocket)), rep('F_pocket',length(F_pocket))),
                                Site_hla = c(A_pocket,B_pocket,C_pocket,D_pocket,E_pocket,F_pocket))
     Class_I <- c('A', 'B', 'C')
-    pockets_df <- crossing(class_I_pockets_dict, HLA = Class_I)
+    pockets_df <- tidyr::crossing(class_I_pockets_dict, HLA = Class_I)
   
     P1 <- c(7, 9, 24, 31, 32, 43, 52)
     P6 <- c(11, 62, 65, 66, 69)
@@ -104,7 +101,7 @@ hla_pocket <- function(manova_results){
     class_II_alpha_pockets_dict <- data.frame(Pocket = c(rep('P1',length(P1)), rep('P6',length(P6)), rep('P9',length(P9))), 
                              Site_hla = c(P1,P6,P9))
     Class_II_alpha <- c('DQA1', 'DPA1')
-    pockets_df_II_alpha <- crossing(class_II_alpha_pockets_dict, HLA = Class_II_alpha)
+    pockets_df_II_alpha <- tidyr::crossing(class_II_alpha_pockets_dict, HLA = Class_II_alpha)
     
     P1 <- c(85, 86, 89, 90)
     P4 <- c(13, 26, 28, 70, 74, 78)
@@ -115,10 +112,11 @@ hla_pocket <- function(manova_results){
                                              rep('P7',length(P7)), rep('P9',length(P9))), 
                                              Site_hla = c(P1,P4,P6,P7,P9))
     Class_II_beta <- c('DRB1','DQB1', 'DPB1')
-    pockets_df_II_beta <- crossing(class_II_beta_pockets_dict, HLA = Class_II_beta)
+    pockets_df_II_beta <- tidyr::crossing(class_II_beta_pockets_dict, HLA = Class_II_beta)
     pockets_df <- rbind(pockets_df, pockets_df_II_alpha, pockets_df_II_beta)
     
-    hla_annotated <- left_join(manova_results, pockets_df, by = 'Site_hla')
+    hla_annotated <- left_join(manova_results, pockets_df, by = c("HLA", 'Site_hla'))
+    return(hla_annotated)
 }
 
 
